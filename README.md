@@ -37,7 +37,8 @@ Mejorar el modelo con el tiempo
 Analizar patrones de comportamiento
 ------------------------
 **************************
-Autor
+Autor:
+
 Proyecto desarrollado por Sebastian Rodriguez Bolivar (Ingeniería Industrial)
 
 RODBOL.
