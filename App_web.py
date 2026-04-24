@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
 import os
+import numpy as np
 
 # ----------------------------
 # CONFIG
@@ -11,7 +12,7 @@ st.set_page_config(page_title="Predictor de Procrastinación", page_icon="🧠")
 st.title("🧠 Predictor Inteligente de Procrastinación")
 
 # ----------------------------
-# FUNCIÓN GUARDAR DATOS
+# GUARDAR DATOS
 # ----------------------------
 def guardar_datos(nuevo_dato):
     archivo = "datos_usuarios.csv"
@@ -28,7 +29,7 @@ def guardar_datos(nuevo_dato):
     df.to_csv(archivo, index=False)
 
 # ----------------------------
-# DATOS (BASE + USUARIOS)
+# DATOS
 # ----------------------------
 data_inicial = pd.DataFrame({
     "sueno": [4,6,7,5,8,3,6,7,5,4],
@@ -44,14 +45,17 @@ if os.path.exists("datos_usuarios.csv") and os.path.getsize("datos_usuarios.csv"
 else:
     data = data_inicial
 
+# 🔥 transformación redes
+data["redes_log"] = np.log1p(data["redes"])
+
 # ----------------------------
 # MODELO
 # ----------------------------
-X = data[["sueno", "redes", "energia", "dificultad"]]
+X = data[["sueno", "redes_log", "energia", "dificultad"]]
 y = data["procrastino"]
 
 if len(y.unique()) > 1:
-    modelo = LogisticRegression()
+    modelo = LogisticRegression(C=0.5)
     modelo.fit(X, y)
 else:
     modelo = None
@@ -68,22 +72,25 @@ with col1:
     energia = st.slider("⚡ Energía (1-5)", 1, 5, 3)
 
 with col2:
-    redes = st.slider("📱 Minutos en redes", 0, 180, 60)
+    redes = st.slider("📱 Minutos en redes", 0, 300, 60)
     dificultad = st.slider("📚 Dificultad (1-5)", 1, 5, 3)
 
 st.markdown("---")
 
 # ----------------------------
-# PREDICCIÓN + CONSEJOS
+# PREDICCIÓN + EXPLICACIÓN
 # ----------------------------
 if st.button("🔍 Analizar riesgo"):
 
-    entrada = [[sueno, redes, energia, dificultad]]
+    redes_log = np.log1p(redes)
+    entrada = [[sueno, redes_log, energia, dificultad]]
 
     if modelo is not None:
         prob = modelo.predict_proba(entrada)[0][1]
+        pesos = modelo.coef_[0]
     else:
         prob = 0.5
+        pesos = [0,0,0,0]
 
     # Guardar datos
     nuevo_dato = {
@@ -95,7 +102,9 @@ if st.button("🔍 Analizar riesgo"):
     }
     guardar_datos(nuevo_dato)
 
+    # ----------------------------
     # RESULTADO
+    # ----------------------------
     st.subheader("📊 Resultado")
     st.progress(int(prob * 100))
     st.metric("Probabilidad de procrastinar", f"{prob*100:.2f}%")
@@ -109,11 +118,36 @@ if st.button("🔍 Analizar riesgo"):
 
     st.markdown("---")
 
+    # ----------------------------
+    # 🔥 EXPLICACIÓN DEL MODELO
+    # ----------------------------
+    st.markdown("### 🧠 ¿Por qué esta predicción?")
+
+    variables = ["Sueño", "Redes", "Energía", "Dificultad"]
+    valores = [sueno, redes_log, energia, dificultad]
+
+    contribuciones = []
+
+    for v, p, val in zip(variables, pesos, valores):
+        impacto = p * val
+        contribuciones.append((v, impacto))
+
+    contribuciones.sort(key=lambda x: abs(x[1]), reverse=True)
+
+    for var, impacto in contribuciones:
+        if impacto > 0:
+            st.write(f"🔺 {var} aumenta el riesgo")
+        elif impacto < 0:
+            st.write(f"🔻 {var} reduce el riesgo")
+
+    # ----------------------------
     # FACTORES
+    # ----------------------------
     st.markdown("### 🧠 Factores detectados")
+
     factores = []
 
-    if redes > 90:
+    if redes > 120:
         factores.append("uso elevado de redes 📱")
     if sueno < 5:
         factores.append("falta de sueño 😴")
@@ -127,15 +161,17 @@ if st.button("🔍 Analizar riesgo"):
     else:
         st.write("No se detectaron factores críticos")
 
-    # RECOMENDACIONES (🔥 aquí estaban fallando antes)
+    # ----------------------------
+    # RECOMENDACIONES
+    # ----------------------------
     st.markdown("### 💡 Recomendaciones")
 
-    if redes > 90:
-        st.write("📱 Reduce redes antes de estudiar")
+    if redes > 120:
+        st.write("📱 Reduce el uso de redes antes de estudiar")
     if sueno < 5:
-        st.write("😴 Duerme mejor")
+        st.write("😴 Mejora tu descanso")
     if energia <= 2:
-        st.write("⚡ Haz pausas activas")
+        st.write("⚡ Realiza pausas activas")
     if dificultad >= 4:
         st.write("📚 Divide la tarea en partes pequeñas")
 
@@ -160,16 +196,14 @@ if st.session_state.mostrar:
 
     st.markdown("## 📊 Análisis de datos")
 
-    # Distribución
     fig1, ax1 = plt.subplots()
     conteo = data["procrastino"].value_counts().sort_index()
     ax1.bar(["No", "Sí"], conteo)
     st.pyplot(fig1)
 
-    # Importancia
     if modelo is not None:
         fig2, ax2 = plt.subplots()
-        ax2.barh(X.columns, modelo.coef_[0])
+        ax2.barh(["Sueño", "Redes", "Energía", "Dificultad"], modelo.coef_[0])
         st.pyplot(fig2)
     else:
-        st.warning("⚠️ Aún no hay suficientes datos para análisis avanzado")
+        st.warning("⚠️ Aún no hay suficientes datos")
